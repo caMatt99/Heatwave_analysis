@@ -1,0 +1,87 @@
+# Single source of truth for the 9 macrozones used across the pipeline.
+# Both eurostat_client.py and openmeteo_client.py read from this file
+# instead of hardcoding location data themselves.
+
+countries:
+  italy:
+    code: IT
+    macrozones:
+      nord:
+        name: IT_nord
+        nuts2: [ITC1, ITC2, ITC3, ITC4, ITH1, ITH2, ITH3, ITH4, ITH5]
+        centroid:
+          city: Milano
+          lat: 45.46
+          lon: 9.19
+      centro:
+        name: IT_centro
+        nuts2: [ITI1, ITI2, ITI3, ITI4]
+        centroid:
+          city: Roma
+          lat: 41.90
+          lon: 12.50
+      sud:
+        name: IT_sud
+        nuts2: [ITF1, ITF2, ITF3, ITF4, ITF5, ITF6, ITG1, ITG2]
+        centroid:
+          city: Napoli
+          lat: 40.85
+          lon: 14.27
+
+  france:
+    code: FR
+    macrozones:
+      nord:
+        name: FR_nord
+        nuts2: [FRE1, FRE2, FRD1, FRD2, FR10, FRF1, FRF2, FRF3, FRH0, FRB0]
+        centroid:
+          city: Paris
+          lat: 48.85
+          lon: 2.35
+      centro:
+        name: FR_centro
+        nuts2: [FRG0, FRC1, FRC2, FRI3, FRI2, FRK1, FRK2, FRI1]
+        centroid:
+          city: Lyon
+          lat: 45.76
+          lon: 4.84
+      sud:
+        name: FR_sud
+        nuts2: [FRJ1, FRJ2, FRL0, FRM0]
+        centroid:
+          city: Marseille
+          lat: 43.30
+          lon: 5.37
+
+  spain:
+    code: ES
+    macrozones:
+      nord:
+        name: ES_nord
+        nuts2: [ES11, ES12, ES13, ES21, ES22, ES23]
+        centroid:
+          city: Bilbao
+          lat: 43.26
+          lon: -2.93
+      centro:
+        name: ES_centro
+        nuts2: [ES41, ES30, ES42, ES43, ES24]
+        centroid:
+          city: Madrid
+          lat: 40.42
+          lon: -3.70
+      sud:
+        name: ES_sud
+        nuts2: [ES51, ES52, ES53, ES62, ES61]
+        centroid:
+          city: Valencia
+          lat: 39.47
+          lon: -0.38
+
+excluded_regions:
+  reason: "Non-mainland or anomalous climate, excluded for comparability"
+  codes: [ES70, ES63, ES64]
+
+date_range:
+  start_year: 2015
+  end_year: 2026
