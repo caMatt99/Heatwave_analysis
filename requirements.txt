@@ -4,6 +4,7 @@ eurostat==1.1.1
 idna==3.18
 numpy==2.5.0
 pandas==3.0.3
+pyarrow==24.0.0
 python-dateutil==2.9.0.post0
 PyYAML==6.0.3
 requests==2.34.2

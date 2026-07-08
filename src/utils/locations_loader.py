@@ -46,25 +46,31 @@ def get_macrozones_nuts2(config: dict) -> dict[str, list[str]]:
     return result
 
 
-def get_locations_coordinates(config: dict) -> list[dict]:
-    """Build the location list used by openmeteo_client.fetch_all().
+def get_nuts2_coordinates(config: dict) -> list[dict]:
+    """Build the per-NUTS2 location list used by openmeteo_client.fetch_all().
+
+    Unlike get_locations_coordinates (macrozone-level), this returns
+    one entry per NUTS2 region, so each region gets its own weather
+    series from its own capital city, instead of sharing a single
+    macrozone centroid.
 
     Args:
         config: Parsed config as returned by load_config().
 
     Returns:
-        list[dict]: One entry per macrozone, each with "name", "lat", "lon".
+        list[dict]: One entry per NUTS2 code, each with "name" (the
+        NUTS2 code, used as cache filename identifier), "lat", "lon".
     """
     result = []
     for country in config["countries"].values():
         for zone in country["macrozones"].values():
-            result.append({
-                "name": zone["name"],
-                "lat": zone["centroid"]["lat"],
-                "lon": zone["centroid"]["lon"],
-            })
+            for nuts2_code, region in zone["regions"].items():
+                result.append({
+                    "name": nuts2_code,
+                    "lat": region["lat"],
+                    "lon": region["lon"],
+                })
     return result
-
 
 def get_date_range(config: dict) -> tuple[int, int]:
     """Return the (start_year, end_year) range from config.

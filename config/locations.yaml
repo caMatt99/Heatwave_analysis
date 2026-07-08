@@ -13,20 +13,38 @@ countries:
           city: Milano
           lat: 45.46
           lon: 9.19
+        regions:
+          ITC1: {city: Torino,   lat: 45.07, lon: 7.69}
+          ITC2: {city: Aosta,    lat: 45.74, lon: 7.32}
+          ITC3: {city: Genova,   lat: 44.41, lon: 8.93}
+          ITC4: {city: Milano,   lat: 45.46, lon: 9.19}
+          ITH1: {city: Bolzano,  lat: 46.50, lon: 11.35}
+          ITH2: {city: Trento,   lat: 46.07, lon: 11.12}
+          ITH3: {city: Venezia,  lat: 45.44, lon: 12.33}
+          ITH4: {city: Trieste,  lat: 45.65, lon: 13.77}
+          ITH5: {city: Bologna,  lat: 44.49, lon: 11.34}
       centro:
         name: IT_centro
         nuts2: [ITI1, ITI2, ITI3, ITI4]
-        centroid:
-          city: Roma
-          lat: 41.90
-          lon: 12.50
+        centroid: {city: Roma, lat: 41.90, lon: 12.50}
+        regions:
+          ITI1: {city: Firenze, lat: 43.77, lon: 11.25}
+          ITI2: {city: Perugia, lat: 43.11, lon: 12.39}
+          ITI3: {city: Ancona,  lat: 43.62, lon: 13.52}
+          ITI4: {city: Roma,    lat: 41.90, lon: 12.50}
       sud:
         name: IT_sud
         nuts2: [ITF1, ITF2, ITF3, ITF4, ITF5, ITF6, ITG1, ITG2]
-        centroid:
-          city: Napoli
-          lat: 40.85
-          lon: 14.27
+        centroid: {city: Napoli, lat: 40.85, lon: 14.27}
+        regions:
+          ITF1: {city: "L'Aquila",  lat: 42.35, lon: 13.40}
+          ITF2: {city: Campobasso,  lat: 41.56, lon: 14.66}
+          ITF3: {city: Napoli,      lat: 40.85, lon: 14.27}
+          ITF4: {city: Bari,        lat: 41.12, lon: 16.87}
+          ITF5: {city: Potenza,     lat: 40.64, lon: 15.81}
+          ITF6: {city: Catanzaro,   lat: 38.91, lon: 16.59}
+          ITG1: {city: Palermo,     lat: 38.12, lon: 13.36}
+          ITG2: {city: Cagliari,    lat: 39.22, lon: 9.11}
 
   france:
     code: FR
@@ -34,24 +52,40 @@ countries:
       nord:
         name: FR_nord
         nuts2: [FRE1, FRE2, FRD1, FRD2, FR10, FRF1, FRF2, FRF3, FRH0, FRB0]
-        centroid:
-          city: Paris
-          lat: 48.85
-          lon: 2.35
+        centroid: {city: Paris, lat: 48.85, lon: 2.35}
+        regions:
+          FRE1: {city: Lille,    lat: 50.63, lon: 3.06}
+          FRE2: {city: Amiens,   lat: 49.89, lon: 2.30}
+          FRD1: {city: Caen,     lat: 49.18, lon: -0.37}
+          FRD2: {city: Rouen,    lat: 49.44, lon: 1.10}
+          FR10: {city: Paris,    lat: 48.85, lon: 2.35}
+          FRF1: {city: Strasbourg, lat: 48.58, lon: 7.75}
+          FRF2: {city: Reims,    lat: 49.26, lon: 4.03}
+          FRF3: {city: Metz,     lat: 49.12, lon: 6.18}
+          FRH0: {city: Rennes,   lat: 48.11, lon: -1.68}
+          FRB0: {city: Orléans,  lat: 47.90, lon: 1.90}
       centro:
         name: FR_centro
         nuts2: [FRG0, FRC1, FRC2, FRI3, FRI2, FRK1, FRK2, FRI1]
-        centroid:
-          city: Lyon
-          lat: 45.76
-          lon: 4.84
+        centroid: {city: Lyon, lat: 45.76, lon: 4.84}
+        regions:
+          FRG0: {city: Nantes,   lat: 47.22, lon: -1.55}
+          FRC1: {city: Dijon,    lat: 47.32, lon: 5.04}
+          FRC2: {city: Besançon, lat: 47.24, lon: 6.02}
+          FRI3: {city: Poitiers, lat: 46.58, lon: 0.34}
+          FRI2: {city: Limoges,  lat: 45.83, lon: 1.26}
+          FRK1: {city: "Clermont-Ferrand", lat: 45.78, lon: 3.09}
+          FRK2: {city: Lyon,     lat: 45.76, lon: 4.84}
+          FRI1: {city: Bordeaux, lat: 44.84, lon: -0.58}
       sud:
         name: FR_sud
         nuts2: [FRJ1, FRJ2, FRL0, FRM0]
-        centroid:
-          city: Marseille
-          lat: 43.30
-          lon: 5.37
+        centroid: {city: Marseille, lat: 43.30, lon: 5.37}
+        regions:
+          FRJ1: {city: Montpellier, lat: 43.61, lon: 3.88}
+          FRJ2: {city: Toulouse,    lat: 43.60, lon: 1.44}
+          FRL0: {city: Marseille,   lat: 43.30, lon: 5.37}
+          FRM0: {city: Ajaccio,     lat: 41.92, lon: 8.74}
 
   spain:
     code: ES
@@ -59,24 +93,34 @@ countries:
       nord:
         name: ES_nord
         nuts2: [ES11, ES12, ES13, ES21, ES22, ES23]
-        centroid:
-          city: Bilbao
-          lat: 43.26
-          lon: -2.93
+        centroid: {city: Bilbao, lat: 43.26, lon: -2.93}
+        regions:
+          ES11: {city: "Santiago de Compostela", lat: 42.88, lon: -8.54}
+          ES12: {city: Oviedo,   lat: 43.36, lon: -5.85}
+          ES13: {city: Santander, lat: 43.46, lon: -3.80}
+          ES21: {city: "Vitoria-Gasteiz", lat: 42.85, lon: -2.67}
+          ES22: {city: Pamplona, lat: 42.82, lon: -1.64}
+          ES23: {city: Logroño,  lat: 42.47, lon: -2.45}
       centro:
         name: ES_centro
         nuts2: [ES41, ES30, ES42, ES43, ES24]
-        centroid:
-          city: Madrid
-          lat: 40.42
-          lon: -3.70
+        centroid: {city: Madrid, lat: 40.42, lon: -3.70}
+        regions:
+          ES41: {city: Valladolid, lat: 41.65, lon: -4.72}
+          ES30: {city: Madrid,     lat: 40.42, lon: -3.70}
+          ES42: {city: Toledo,     lat: 39.86, lon: -4.02}
+          ES43: {city: Mérida,     lat: 38.92, lon: -6.34}
+          ES24: {city: Zaragoza,   lat: 41.65, lon: -0.88}
       sud:
         name: ES_sud
         nuts2: [ES51, ES52, ES53, ES62, ES61]
-        centroid:
-          city: Valencia
-          lat: 39.47
-          lon: -0.38
+        centroid: {city: Valencia, lat: 39.47, lon: -0.38}
+        regions:
+          ES51: {city: Barcelona, lat: 41.39, lon: 2.16}
+          ES52: {city: Valencia,  lat: 39.47, lon: -0.38}
+          ES53: {city: "Palma de Mallorca", lat: 39.57, lon: 2.65}
+          ES62: {city: Murcia,    lat: 37.99, lon: -1.13}
+          ES61: {city: Sevilla,   lat: 37.39, lon: -5.99}
 
 excluded_regions:
   reason: "Non-mainland or anomalous climate, excluded for comparability"
@@ -84,4 +128,4 @@ excluded_regions:
 
 date_range:
   start_year: 2015
-  end_year: 2026
+  end_year: 2025
