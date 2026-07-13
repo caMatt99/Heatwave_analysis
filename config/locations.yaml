@@ -25,16 +25,18 @@ countries:
           ITH5: {city: Bologna,  lat: 44.49, lon: 11.34}
       centro:
         name: IT_centro
-        nuts2: [ITI1, ITI2, ITI3, ITI4]
+        nuts2: [ITI1, ITI2, ITI3, ITI4, ITG2]
         centroid: {city: Roma, lat: 41.90, lon: 12.50}
         regions:
           ITI1: {city: Firenze, lat: 43.77, lon: 11.25}
           ITI2: {city: Perugia, lat: 43.11, lon: 12.39}
           ITI3: {city: Ancona,  lat: 43.62, lon: 13.52}
           ITI4: {city: Roma,    lat: 41.90, lon: 12.50}
+          ITG2: {city: Cagliari,    lat: 39.22, lon: 9.11}
+
       sud:
         name: IT_sud
-        nuts2: [ITF1, ITF2, ITF3, ITF4, ITF5, ITF6, ITG1, ITG2]
+        nuts2: [ITF1, ITF2, ITF3, ITF4, ITF5, ITF6, ITG1]
         centroid: {city: Napoli, lat: 40.85, lon: 14.27}
         regions:
           ITF1: {city: "L'Aquila",  lat: 42.35, lon: 13.40}
@@ -44,7 +46,6 @@ countries:
           ITF5: {city: Potenza,     lat: 40.64, lon: 15.81}
           ITF6: {city: Catanzaro,   lat: 38.91, lon: 16.59}
           ITG1: {city: Palermo,     lat: 38.12, lon: 13.36}
-          ITG2: {city: Cagliari,    lat: 39.22, lon: 9.11}
 
   france:
     code: FR

@@ -22,9 +22,6 @@ from src.utils.locations_loader import load_config, get_macrozones_nuts2
 RAW_DIR = Path("data/raw/eurostat")
 MAX_RETRIES = 3
 
-# Age codes that partition cleanly (no overlap) into "75+" for each dataset -
-# see the earlier investigation: DEMO_R_PJANGROUP has overlapping aggregate
-# codes (Y_GE75, Y_GE80, Y_GE85) that must NOT all be summed together.
 AGE_CODES = {
     "mortality": ["Y_LT5", "Y5-9", "Y10-14", "Y15-19", "Y20-24", "Y25-29",
                   "Y30-34", "Y35-39", "Y40-44", "Y45-49", "Y50-54", "Y55-59",
@@ -36,12 +33,7 @@ AGE_CODES = {
 
 
 def _save_parquet(path: Path, df) -> None:
-    """Write a DataFrame to a temp file, then rename it into place.
-
-    Args:
-        path: Final destination path.
-        df: DataFrame to persist.
-    """
+    """Write a DataFrame to a temp file, then rename it into place."""
     tmp_path = path.with_suffix(".tmp")
     df.to_parquet(tmp_path)
     tmp_path.rename(path)
@@ -70,7 +62,7 @@ def fetch_eurostat_data(dataset_code: str, filter_pars: dict, cache_name: str) -
     target_path = RAW_DIR / f"{cache_name}.parquet"
 
     if target_path.exists():
-        logging.info(f"Cache hit: {cache_name}, skipping API call")
+        logging.debug(f"Cache hit: {cache_name}, skipping API call")
         return target_path
 
     last_error = None
@@ -122,18 +114,31 @@ def fetch_all(macrozones: dict[str, list[str]], dataset_code: str,
     """
     results = {}
     failures = []
+    cache_hits = 0
+    downloaded = 0
     extra_filters = extra_filters or {}
 
     for name, geo_codes in macrozones.items():
         cache_name = f"{name}_{cache_suffix}"
+        target_path = RAW_DIR / f"{cache_name}.parquet"
+        was_cached = target_path.exists()
+
         filter_pars = {"geo": geo_codes, **extra_filters}
         try:
             results[name] = fetch_eurostat_data(dataset_code, filter_pars, cache_name)
+            if was_cached:
+                cache_hits += 1
+            else:
+                downloaded += 1
         except Exception as e:
             logging.error(f"Skipping {name} after exhausting retries: {e}")
             failures.append(name)
         time.sleep(1)
 
+    logging.info(
+        f"{cache_suffix}: {cache_hits} cache hit(s), {downloaded} downloaded, "
+        f"{len(failures)} failed ({len(macrozones)} total)"
+    )
     if failures:
         logging.error(f"{len(failures)} macrozone(s) failed: {failures}")
 
@@ -146,23 +151,26 @@ if __name__ == "__main__":
     config = load_config()
     macrozones = get_macrozones_nuts2(config)
 
-    # 1. Total weekly mortality (as before)
+    logging.info("Starting Eurostat extraction (weekly deaths, total)")
     mortality_total = fetch_all(
         macrozones, "DEMO_R_MWK2_TS", "mortality_total",
         extra_filters={"sex": ["T"]},
     )
+    mortality_total_ok = len(mortality_total) == len(macrozones)
 
-    # 2. Weekly mortality by age group and sex
+    logging.info("Starting Eurostat extraction (weekly deaths, by age)")
     mortality_by_age = fetch_all(
         macrozones, "DEMO_R_MWK2_05", "mortality_by_age",
         extra_filters={"sex": ["M", "F"], "age": AGE_CODES["mortality"]},
     )
+    mortality_by_age_ok = len(mortality_by_age) == len(macrozones)
 
-    # 3. Population by age group and sex (annual, not weekly)
+    logging.info("Starting Eurostat extraction (population, by age)")
     population_by_age = fetch_all(
         macrozones, "DEMO_R_PJANGROUP", "population_by_age",
         extra_filters={"sex": ["M", "F"], "age": AGE_CODES["population"]},
     )
+    population_by_age_ok = len(population_by_age) == len(macrozones)
 
     expected = len(macrozones)
     if (len(mortality_total) < expected
