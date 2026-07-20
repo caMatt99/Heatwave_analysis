@@ -1,0 +1,57 @@
+# Age-bin grouping schemes for analysis views (build_analysis_view.py)
+# and the Streamlit dashboard.
+#
+# IMPORTANT: the `ranges` below list the age codes as they exist in
+# mortality_by_age_weekly.parquet AFTER reconciliation (i.e. AFTER
+# build_weekly_dataset_by_age.py has already collapsed the raw
+# Eurostat "Y85-89" + "Y_GE90" into a single "Y_GE85"). Do not use the
+# raw Eurostat vocabulary here - "Y85-89" and "Y_GE90" no longer exist
+# as separate rows by the time this config is applied. This file is
+# only ever read downstream of that reconciliation step, never before
+# it, and it does not change anything upstream in the pipeline.
+#
+# Each scheme maps a set of source age codes to one coarser label.
+# Any age code present in the data but not listed under a scheme is
+# left out of that scheme's output on purpose (fail loudly rather than
+# silently drop rows - see age_bins_loader.validate_scheme).
+#
+# NOTE: there is intentionally no "standardization" scheme here. The
+# notebook's ESP2013-based age standardization uses the fine-grained
+# quinquennial bins and the full ESP2013 weight table as-is - coarser
+# bins here would not line up with those weights. This file is only
+# for the stratified effect-modification analysis below.
+
+schemes:
+
+  # Finer old-age split for stratified heat-mortality analysis
+  # (effect modification by age, not standardization): under-65 stays
+  # one bin since it's not the research focus, but the elderly range
+  # splits further to show whether vulnerability keeps rising with age.
+  stratified_heat:
+    bins:
+      - label: "under_65"
+        ranges:
+          - Y_LT5
+          - Y5-9
+          - Y10-14
+          - Y15-19
+          - Y20-24
+          - Y25-29
+          - Y30-34
+          - Y35-39
+          - Y40-44
+          - Y45-49
+          - Y50-54
+          - Y55-59
+          - Y60-64
+      - label: "65-74"
+        ranges:
+          - Y65-69
+          - Y70-74
+      - label: "75-84"
+        ranges:
+          - Y75-79
+          - Y80-84
+      - label: "85+"
+        ranges:
+          - Y_GE85
