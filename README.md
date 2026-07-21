@@ -162,6 +162,7 @@ The dashboard is a thin presentation layer over the pipeline: it contains no epi
 
 ## Repository Structure
 
+```
 Heatwave_analysis/
 ├── config/
 │   ├── locations.yaml
@@ -216,6 +217,7 @@ Heatwave_analysis/
 ├── requirements.txt
 ├── LICENSE
 └── README.md
+```
 
 ---
 
