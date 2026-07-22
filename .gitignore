@@ -8,6 +8,7 @@
 # repo history with binary/JSON blobs that change on every pull.
 data/raw/
 data/staging/
+data/analytics/
 
 # Local database files (if you use SQLite/DuckDB for the star schema
 # during development instead of a hosted Postgres instance)
