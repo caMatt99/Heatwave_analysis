@@ -22,11 +22,15 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.analysis.epi_metrics import relative_risk, restrict_to_warm_season, linear_fit, excess_mortality
+from src.analysis.epi_metrics import (
+    relative_risk, restrict_to_warm_season, linear_fit, excess_mortality,
+    age_specific_rates, direct_standardize, ESP2013_WEIGHTS,
+)
 from src.utils.age_bins_loader import load_config as load_age_bins_config, get_bin_labels
 from dashboard.data_access import (
     load_total,
     load_age_stratified,
+    load_age_quinquennial,
     region_options,
     region_coordinates,
 )
@@ -65,6 +69,72 @@ def rr_from_frame(frame: pd.DataFrame) -> dict | None:
     except ValueError:
         return None
 
+def rr_standardized_for_geo(frame_18bin: pd.DataFrame) -> dict | None:
+    """Age-standardized (ESP2013) heatwave RR for a single region.
+
+    Takes the 18-bin quinquennial frame for ONE geo, already method-prepped
+    (window/lag/season applied). Collapses sex (M+F, no 'T' so no double count),
+    then for each arm (heatwave vs other weeks) computes an age-specific rate as
+    deaths per person-week at risk, standardizes it with ESP2013 direct
+    weighting, and returns the ratio of the two standardized rates. None if
+    either arm has no rows.
+
+    Rate = total deaths in the arm / total person-weeks at risk in the arm
+    (person-weeks = sum of weekly population over the arm's rows). This makes
+    the two arms comparable even though they have very different week counts -
+    unlike an annualized rate, which would divide by calendar years and so
+    understate the arm with fewer weeks (the heatwave arm), producing a
+    spuriously low RR.
+
+    Standardization matters here because this is a cross-region comparison:
+    without it, a region's RR could differ just because its population is older,
+    not because heat hits harder. ESP2013 puts every region on the same age
+    structure so the comparison is fair.
+    """
+    exp = frame_18bin[frame_18bin["any_heatwave_week"] == True]
+    nonexp = frame_18bin[frame_18bin["any_heatwave_week"] == False]
+    if len(exp) == 0 or len(nonexp) == 0:
+        return None
+
+    def _std_rate(arm: pd.DataFrame) -> float | None:
+        # Per age band: deaths per person-week at risk. Summing population over
+        # the arm's weekly rows gives person-weeks, so the denominator scales
+        # with how many weeks the arm actually has - making the two arms
+        # comparable. Sex is collapsed by the sum (M+F).
+        by_age = arm.groupby("age", as_index=False).agg(
+            deaths=("deaths", "sum"),
+            person_weeks=("population", "sum"),
+        )
+        by_age = by_age[by_age["person_weeks"] > 0]
+        if by_age.empty:
+            return None
+        by_age["rate"] = by_age["deaths"] / by_age["person_weeks"]
+
+        # Direct ESP2013 standardization: weighted average of age-specific
+        # rates using the standard population weights, scaled to per-100k.
+        by_age["weight"] = by_age["age"].map(ESP2013_WEIGHTS)
+        missing = by_age[by_age["weight"].isna()]["age"].tolist()
+        if missing:
+            raise ValueError(f"No ESP2013 weight for age code(s): {sorted(missing)}")
+        total_weight = by_age["weight"].sum()
+        std_rate = (by_age["rate"] * by_age["weight"]).sum() / total_weight * 100_000
+        return std_rate
+
+    try:
+        exp_rate = _std_rate(exp)
+        nonexp_rate = _std_rate(nonexp)
+    except (ValueError, KeyError, IndexError):
+        return None
+
+    if not exp_rate or not nonexp_rate:
+        return None
+
+    return {
+        "rr": exp_rate / nonexp_rate,
+        "std_rate_exposed_per_100k": exp_rate,
+        "std_rate_unexposed_per_100k": nonexp_rate,
+        "n_exposed_weeks": len(exp),
+    }
 
 def apply_lag(frame: pd.DataFrame, lag_weeks: int) -> pd.DataFrame:
     """Shift the heatwave flag forward by lag_weeks within each region."""
@@ -125,6 +195,7 @@ def map_focus(coords_df: pd.DataFrame, geos: list[str]) -> tuple[dict | None, fl
 try:
     total = load_total()
     age_stratified = load_age_stratified()
+    age_quinquennial = load_age_quinquennial()
 except FileNotFoundError as e:
     st.error(str(e))
     st.info("Generate the analysis views first, then reload this page.")
@@ -428,7 +499,21 @@ with tab_age:
 with tab_compare:
     st.subheader("Compare regions side by side")
     st.caption("Pick any set of regions - across countries if you like - to compare their "
-               "heatwave RR under the current time-window, lag, and season settings from the sidebar.")
+               "age-standardized (ESP2013) heatwave RR under the current time-window, lag, "
+               "and season settings from the sidebar.")
+
+    with st.expander("Why age-standardized here? (ESP2013)"):
+        st.markdown(
+            "Comparing regions is the one place standardization matters. A region's raw RR "
+            "could look higher simply because its population is older and more heat-vulnerable, "
+            "not because heat hits harder there. Direct standardization recomputes each region's "
+            "mortality rate as if it had the **same** age structure (the European Standard "
+            "Population 2013), using the 18 quinquennial age bands, so the comparison reflects "
+            "the heat effect rather than demographic differences.\n\n"
+            "This is deliberately **different** from the *By Age* tab, which keeps the age bands "
+            "*unstandardized* on purpose - there the goal is to show how the effect *varies* by "
+            "age (effect modification), not to average it away."
+        )
 
     # This tab has its OWN region multiselect, independent of the global single
     # geography selector, so cross-country comparisons (e.g. Lombardia vs Madrid)
@@ -442,47 +527,50 @@ with tab_compare:
         "Regions to compare",
         options=region_labels,
         default=default_pick,
-        help="Two or more regions. Remember single-region RR is noisier the smaller the region.",
+        help="Two or more regions. Single-region figures are noisier the smaller the region.",
     )
 
     if len(picked) < 2:
         st.info("Pick at least two regions to compare.")
     else:
         picked_geos = [label_to_geo[label] for label in picked]
-        subset = _valid_all[_valid_all["geo"].isin(picked_geos)]
+
+        # Standardization needs the 18-bin quinquennial view, not the 4-bin one.
+        aq_valid = age_quinquennial[~age_quinquennial["population_is_missing"]].copy()
+        subset = aq_valid[aq_valid["geo"].isin(picked_geos)]
         prepared_cmp = method_prep(subset)
 
         rows = []
         for geo in picked_geos:
-            r = rr_from_frame(prepared_cmp[prepared_cmp["geo"] == geo])
+            r = rr_standardized_for_geo(prepared_cmp[prepared_cmp["geo"] == geo])
             meta = regions[regions["geo"] == geo].iloc[0]
             if r:
                 rows.append({
                     "Region": meta["region_name"],
                     "Country": meta["country"],
                     "geo": geo,
-                    "RR": r["rr"],
-                    "Risk exposed /100k": r["risk_exposed"] * 100_000,
-                    "Risk other /100k": r["risk_unexposed"] * 100_000,
+                    "RR (ESP2013)": r["rr"],
+                    "Std. rate, heatwave /100k": r["std_rate_exposed_per_100k"],
+                    "Std. rate, other /100k": r["std_rate_unexposed_per_100k"],
                     "Heatwave weeks": r["n_exposed_weeks"],
                 })
 
         if not rows:
             st.warning("None of the selected regions have enough data at the current settings.")
         else:
-            cmp_df = pd.DataFrame(rows).sort_values("RR", ascending=False)
+            cmp_df = pd.DataFrame(rows).sort_values("RR (ESP2013)", ascending=False)
 
             # Side-by-side RR bars, one per region, shared RR=1 reference and the
             # same RR-anchored color scale as the map, so colors mean the same thing.
             fig = px.bar(
-                cmp_df, x="RR", y="Region", orientation="h",
-                color="RR", color_continuous_scale=RISK_SCALE, color_continuous_midpoint=1.0,
-                text=cmp_df["RR"].round(3), hover_data=["Country", "Heatwave weeks"],
+                cmp_df, x="RR (ESP2013)", y="Region", orientation="h",
+                color="RR (ESP2013)", color_continuous_scale=RISK_SCALE, color_continuous_midpoint=1.0,
+                text=cmp_df["RR (ESP2013)"].round(3), hover_data=["Country", "Heatwave weeks"],
             )
             fig.add_vline(x=1.0, line_dash="dash", line_color="gray", annotation_text="RR = 1")
             fig.update_layout(
                 height=max(240, 46 * len(cmp_df)),
-                yaxis_title="", xaxis_title="Relative Risk",
+                yaxis_title="", xaxis_title="Age-standardized Relative Risk (ESP2013)",
                 coloraxis_showscale=False,
                 yaxis=dict(autorange="reversed"),  # highest RR on top
                 margin=dict(l=0, r=0, t=10, b=0),
@@ -493,9 +581,10 @@ with tab_compare:
             top = cmp_df.iloc[0]
             bottom = cmp_df.iloc[-1]
             st.caption(
-                f"Highest heatwave association: **{top['Region']}** (RR {top['RR']:.3f}); "
-                f"lowest: **{bottom['Region']}** (RR {bottom['RR']:.3f}). "
-                "Differences across small regions can reflect noise as much as real variation."
+                f"Highest age-standardized heatwave association: **{top['Region']}** "
+                f"(RR {top['RR (ESP2013)']:.3f}); lowest: **{bottom['Region']}** "
+                f"(RR {bottom['RR (ESP2013)']:.3f}). Differences across small regions can "
+                "reflect noise as much as real variation."
             )
 
             st.dataframe(
