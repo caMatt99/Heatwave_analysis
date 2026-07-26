@@ -3,7 +3,7 @@ Streamlit dashboard for the heatwave-mortality analysis.
 
 Thin presentation layer. All epidemiological calculations come from
 src/analysis/epi_metrics.py (the same functions the notebook uses); all data
-access goes through dashboard/views_loader.py; all reusable UI rendering lives
+access goes through dashboard/data_access.py; all reusable UI rendering lives
 in dashboard/components.py. This file's job is orchestration only:
 load -> read global filters -> filter -> compute -> hand to a component.
 
@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.analysis.epi_metrics import relative_risk, restrict_to_warm_season, linear_fit, excess_mortality
 from src.utils.age_bins_loader import load_config as load_age_bins_config, get_bin_labels
-from dashboard.views_loader import (
+from dashboard.data_access import (
     load_total,
     load_age_stratified,
     region_options,
