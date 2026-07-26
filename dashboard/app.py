@@ -22,7 +22,7 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.analysis.epi_metrics import relative_risk, restrict_to_warm_season, linear_fit
+from src.analysis.epi_metrics import relative_risk, restrict_to_warm_season, linear_fit, excess_mortality
 from src.utils.age_bins_loader import load_config as load_age_bins_config, get_bin_labels
 from dashboard.views_loader import (
     load_total,
@@ -188,10 +188,7 @@ lag_weeks = st.sidebar.slider(
 )
 
 st.sidebar.divider()
-st.sidebar.caption(
-    "Calculations use the same functions as the analysis notebook "
-    "(src/analysis/epi_metrics.py). Data: Eurostat + Open-Meteo."
-)
+
 
 
 def geo_filter(frame: pd.DataFrame) -> tuple[pd.DataFrame, str]:
@@ -257,8 +254,8 @@ show_kpi_header(
 )
 method_expander()
 
-tab_overview, tab_rr, tab_age, tab_compare, tab_regression, tab_trend = st.tabs(
-    ["Overview", "Relative Risk", "By Age", "Compare Regions", "Temp vs Mortality", "Trend"]
+tab_overview, tab_rr, tab_age, tab_compare, tab_excess, tab_regression, tab_trend = st.tabs(
+    ["Overview", "Relative Risk", "By Age", "Compare Regions", "Excess Mortality", "Temp vs Mortality", "Trend"]
 )
 
 
@@ -508,6 +505,102 @@ with tab_compare:
             )
 
 
+
+# ==========================================================================
+# TAB: Excess Mortality - descriptive excess vs same-ISO-week baseline
+# ==========================================================================
+
+with tab_excess:
+    st.subheader("Excess mortality during heatwave weeks")
+    st.caption("How many more deaths occurred during heatwave weeks than in the same ISO week of "
+               "years without a heatwave. A descriptive complement to Relative Risk - the "
+               "absolute, more communicable figure.")
+
+    st.warning(
+        "This is **descriptive, not causal**: the excess is measured against a same-week, "
+        "non-heatwave baseline and is *not* a count of heat-attributable deaths. Part may reflect "
+        "other factors, and the baseline doesn't adjust for the long-term population trend.",
+        icon="⚠️",
+    )
+
+    # Respects the global geography selection, but NOT the season/lag method
+    # controls: excess_mortality builds its own same-ISO-week baseline, which
+    # already handles seasonality by construction. Applying the warm-season
+    # filter on top would just shrink the sample without changing the logic.
+    # The time-window slider IS applied, so you can focus on specific years.
+    valid_excess = _valid_all.copy()
+    valid_excess = apply_window(valid_excess)
+    valid_excess, excess_label = geo_filter(valid_excess)
+
+    if valid_excess.empty:
+        st.warning(f"No data for {excess_label} in the selected window.")
+    else:
+        try:
+            excess = excess_mortality(valid_excess)
+        except ValueError as e:
+            st.error(str(e))
+            excess = None
+
+        if excess is None or excess.empty:
+            st.info("Not enough non-heatwave baseline weeks to compute excess for this selection.")
+        else:
+            # Headline totals for the current selection.
+            total_excess = excess["excess_abs"].sum()
+            total_baseline = excess["baseline_deaths"].sum()
+            pct = (total_excess / total_baseline * 100) if total_baseline else 0.0
+
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Excess deaths", f"{total_excess:,.0f}",
+                      delta=f"{pct:+.1f}% vs baseline", delta_color="inverse")
+            c2.metric("Baseline (expected) deaths", f"{total_baseline:,.0f}")
+            c3.metric("Heatwave weeks", f"{len(excess):,}")
+
+            # Excess deaths per year - surfaces which years drove it (e.g. 2022).
+            by_year = (
+                excess.groupby("year")
+                .agg(excess_deaths=("excess_abs", "sum"),
+                     baseline=("baseline_deaths", "sum"))
+                .reset_index()
+            )
+            by_year["excess_pct"] = by_year["excess_deaths"] / by_year["baseline"] * 100
+
+            fig = px.bar(
+                by_year, x="year", y="excess_deaths",
+                color="excess_deaths", color_continuous_scale=RISK_SCALE,
+                color_continuous_midpoint=0.0,
+                hover_data={"excess_pct": ":.1f"},
+            )
+            fig.add_hline(y=0, line_color="black", line_width=1)
+            fig.update_layout(
+                xaxis_title="Year",
+                yaxis_title="Excess deaths (vs same-week baseline)",
+                coloraxis_showscale=False,
+            )
+            st.plotly_chart(fig, width="stretch")
+            st.caption(f"**{excess_label}** - a tall bar marks a year whose heatwave weeks far "
+                       "exceeded a normal year's equivalent weeks. Negative bars are years where "
+                       "flagged weeks fell below baseline: a reminder this is a noisy descriptive "
+                       "measure, not a causal signal.")
+
+            # Per-country breakdown, only meaningful when not already filtered to one.
+            if geo_sel is None and country_sel == "All countries":
+                by_country = (
+                    excess.groupby("country")
+                    .agg(excess_deaths=("excess_abs", "sum"),
+                         baseline=("baseline_deaths", "sum"))
+                    .reset_index()
+                )
+                by_country["excess_pct"] = by_country["excess_deaths"] / by_country["baseline"] * 100
+                by_country = by_country.sort_values("excess_pct", ascending=False)
+                st.markdown("**By country**")
+                st.dataframe(
+                    by_country.rename(columns={
+                        "country": "Country", "excess_deaths": "Excess deaths",
+                        "baseline": "Baseline deaths", "excess_pct": "Excess %",
+                    }).round(1),
+                    width="stretch", hide_index=True,
+                )
+
 # ==========================================================================
 # TAB: Temp vs Mortality regression - full-year on purpose, respects geo
 # ==========================================================================
@@ -527,6 +620,9 @@ with tab_regression:
         st.warning(f"Not enough data to fit a line for {reg_label}.")
     else:
         fit = linear_fit(valid_reg["temperature_2m_mean"], valid_reg["crude_rate_per_100k"])
+        degree = st.slider("Polynomial degree", 1, 5, 3,
+                       help="1 = straight line. 2 = symmetric U. 3 = asymmetric J (steeper heat "
+                            "arm). Higher = risk of fitting noise. Watch R² vs curve wiggliness.")
         x_line = np.linspace(valid_reg["temperature_2m_mean"].min(), valid_reg["temperature_2m_mean"].max(), 100)
         fig = go.Figure()
         fig.add_trace(go.Scatter(
@@ -539,6 +635,18 @@ with tab_regression:
             line=dict(color=RISK_RED, width=3),
             name=f"fit: slope={fit['slope']:.3f}, r={fit['r']:.3f}",
         ))
+        if degree >= 2:
+            from src.analysis.epi_metrics import polynomial_fit
+            try:
+                pfit = polynomial_fit(valid_reg["temperature_2m_mean"],
+                                      valid_reg["crude_rate_per_100k"], degree=degree)
+                fig.add_trace(go.Scatter(
+                    x=pfit["x_curve"], y=pfit["y_curve"], mode="lines",
+                    line=dict(color="#e67e22", width=3),
+                    name=f"degree {degree} (R²={pfit['r2']:.3f})",
+                ))
+            except ValueError as e:
+                st.caption(f"Polynomial fit unavailable: {e}")
         fig.update_layout(xaxis_title="Weekly mean temperature (C)",
                           yaxis_title="Mortality rate (/100k)",
                           legend=dict(orientation="h", yanchor="bottom", y=1.02))
@@ -554,18 +662,45 @@ with tab_regression:
 
 with tab_trend:
     st.subheader("Weekly mortality over time")
-    st.caption("Raw deaths per macrozone within the selected time window. Regular waves are "
-               "seasonality (winter peaks), not heat - so the season filter is not applied here.")
 
-    trend_src = total if country_sel == "All countries" else total[total["country"] == country_sel]
+    # Respect the global geography selection: a single region shows just that
+    # region's series; a country shows its macrozones; otherwise all macrozones.
+    trend_src = total.copy()
+    if geo_sel is not None:
+        trend_src = trend_src[trend_src["geo"] == geo_sel]
+        st.caption(f"Weekly deaths in {region_sel} ({geo_sel}) within the selected time window. "
+                   "Regular waves are seasonality (winter peaks), not heat - so the season "
+                   "filter is not applied here.")
+    else:
+        if country_sel != "All countries":
+            trend_src = trend_src[trend_src["country"] == country_sel]
+        st.caption("Raw deaths per macrozone within the selected time window. Regular waves are "
+                   "seasonality (winter peaks), not heat - so the season filter is not applied here.")
+
     trend_src = apply_window(trend_src)  # window only: lag/season don't apply to a raw death-count series
-    trend = (
-        trend_src.groupby(["country", "macrozone", "week_start_date"], as_index=False)
-        .agg(deaths=("deaths", "sum"))
-    )
-    trend["series"] = trend["country"] + " - " + trend["macrozone"]
-    fig = px.line(trend.sort_values("week_start_date"),
-                  x="week_start_date", y="deaths", color="series")
-    fig.update_layout(xaxis_title="Week", yaxis_title="Deaths (macrozone total)",
-                      legend_title="")
-    st.plotly_chart(fig, width="stretch")
+
+    if trend_src.empty:
+        st.warning("No data available for the current selection and time window.")
+    else:
+        if geo_sel is not None:
+            # Single region: one series for that region.
+            trend = (
+                trend_src.groupby("week_start_date", as_index=False)
+                .agg(deaths=("deaths", "sum"))
+            )
+            trend["series"] = region_sel
+            y_title = "Deaths (region total)"
+        else:
+            # Multiple regions: break down by country-macrozone.
+            trend = (
+                trend_src.groupby(["country", "macrozone", "week_start_date"], as_index=False)
+                .agg(deaths=("deaths", "sum"))
+            )
+            trend["series"] = trend["country"] + " - " + trend["macrozone"]
+            y_title = "Deaths (macrozone total)"
+
+        fig = px.line(trend.sort_values("week_start_date"),
+                      x="week_start_date", y="deaths", color="series")
+        fig.update_layout(xaxis_title="Week", yaxis_title=y_title,
+                          legend_title="")
+        st.plotly_chart(fig, width="stretch")

@@ -6,7 +6,7 @@ Streamlit dashboard.
 Design principle: these functions operate on already-prepared, already-filtered
 DataFrames or plain aggregated numbers. They do NOT decide which rows to
 exclude (e.g. missing population) or what counts as "exposed" (heatwave
-weeks, a season window, a country, an age group) - those are analysis-specific
+weeks, a season window, a country, an age group) those are analysis-specific
 decisions made by the caller. Keeping that logic out of this module is what
 lets the same relative_risk() power the notebook's naive RR, its
 season-corrected RR, its per-country RR, AND a future per-age-group RR,
@@ -15,6 +15,12 @@ without this module needing to know about seasons, countries, or age at all.
 
 import numpy as np
 import pandas as pd
+from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.pipeline import make_pipeline
+from sklearn.metrics import r2_score
+
+
 
 # ESP2013 age-standard weights (source: Eurostat 2013, via PHEindicatormethods).
 # Reconciled to 18 groups: Y_GE85 = original 85-89 (1500) + 90+ (1000), matching
@@ -216,3 +222,118 @@ def linear_fit(x: pd.Series, y: pd.Series) -> dict[str, float]:
     slope, intercept = np.polyfit(x, y, 1)
     r = np.corrcoef(x, y)[0, 1]
     return {"slope": float(slope), "intercept": float(intercept), "r": float(r)}
+
+
+def polynomial_fit(x: pd.Series, y: pd.Series, degree: int = 3) -> dict:
+    """Polynomial regression of y on x, via a scikit-learn pipeline.
+
+    Captures the non-linear (U/J-shaped) temperature-mortality relationship that
+    a straight line flattens: cold and heat both raise mortality, with a minimum
+    at some comfort temperature.
+    The pipeline form scales cleanly and exposes R^2 for comparing degrees.
+
+    Args:
+        x: Independent variable (weekly mean temperature).
+        y: Dependent variable (crude mortality rate).
+        degree: Polynomial degree. 2 = symmetric U; 3 = asymmetric J (steeper
+            heat arm); higher degrees risk fitting noise.
+
+    Returns:
+        dict with:
+        - "x_curve", "y_curve": sorted x grid and fitted y, ready to plot as a line
+        - "r2": coefficient of determination on the fitted data
+        - "degree": the degree used (echoed back, for labels)
+        - "model": the fitted sklearn pipeline (for predicting new points)
+
+    Raises:
+        ValueError: If fewer than degree+1 points, or x has no variation.
+    """
+    if len(x) < degree + 1 or len(y) < degree + 1:
+        raise ValueError(f"Need at least {degree + 1} points to fit a degree-{degree} polynomial.")
+    if x.nunique() < 2:
+        raise ValueError("x has no variation (all identical values); fit is undefined.")
+
+    X = x.to_numpy().reshape(-1, 1)
+    y_arr = y.to_numpy()
+
+    model = make_pipeline(PolynomialFeatures(degree=degree), LinearRegression())
+    model.fit(X, y_arr)
+
+    r2 = r2_score(y_arr, model.predict(X))
+
+    # Smooth curve over the sorted x-range for plotting.
+    x_curve = np.linspace(x.min(), x.max(), 200)
+    y_curve = model.predict(x_curve.reshape(-1, 1))
+
+    return {"x_curve": x_curve, "y_curve": y_curve, "r2": float(r2),
+            "degree": degree, "model": model}
+
+def excess_mortality(
+    df: pd.DataFrame,
+    exposure_col: str = "any_heatwave_week",
+    deaths_col: str = "deaths",
+    geo_col: str = "geo",
+    week_col: str = "week",
+) -> pd.DataFrame:
+    """Excess mortality vs a same-ISO-week, non-exposed baseline.
+
+    For each (geo, ISO week), the baseline is the mean deaths in that same ISO
+    week across the years when that week was NOT flagged as exposed (no
+    heatwave). Excess is then observed - baseline, computed only on the exposed
+    rows. This deliberately keeps the exposure out of its own baseline (the
+    baseline is built from non-exposed years only), so the excess isn't diluted
+    by the very weeks being measured.
+
+    This is a DESCRIPTIVE excess measure, not a causal attribution: the excess
+    during heatwave weeks is not wholly heat-attributable (a late flu peak or a
+    local event could contribute), and this baseline does not adjust for the
+    long-term population trend. It answers "how much higher was mortality than a
+    normal year's same week", not "how many deaths did heat cause".
+
+    Args:
+        df: Weekly frame, already filtered by the caller (e.g. missing
+            population removed). Must contain geo, week, deaths, and the
+            exposure flag columns.
+        exposure_col: Boolean column marking exposed (heatwave) weeks.
+        deaths_col: Weekly death count column.
+        geo_col: Region key column.
+        week_col: ISO week-number column.
+
+    Returns:
+        DataFrame of the exposed rows with added columns:
+        - baseline_deaths: mean deaths for that geo+ISO-week in non-exposed years
+        - excess_abs: observed deaths - baseline_deaths
+        - excess_rel: excess_abs / baseline_deaths (NaN where baseline is 0)
+        Rows whose (geo, week) has no non-exposed year to form a baseline are
+        dropped (no baseline is definable for them).
+
+    Raises:
+        ValueError: If required columns are missing.
+    """
+    required = {exposure_col, deaths_col, geo_col, week_col}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"excess_mortality: missing columns {sorted(missing)}.")
+
+    # Baseline: mean deaths per (geo, ISO week) over NON-exposed rows only.
+    non_exposed = df[df[exposure_col] == False]
+    baseline = (
+        non_exposed.groupby([geo_col, week_col])[deaths_col]
+        .mean()
+        .rename("baseline_deaths")
+        .reset_index()
+    )
+
+    # Excess is defined on the exposed rows.
+    exposed = df[df[exposure_col] == True].merge(baseline, on=[geo_col, week_col], how="left")
+
+    # Drop exposed weeks with no non-exposed baseline (can't define an expected value).
+    exposed = exposed.dropna(subset=["baseline_deaths"]).copy()
+
+    exposed["excess_abs"] = exposed[deaths_col] - exposed["baseline_deaths"]
+    exposed["excess_rel"] = exposed["excess_abs"] / exposed["baseline_deaths"].where(
+        exposed["baseline_deaths"] != 0
+    )
+    return exposed
+
+

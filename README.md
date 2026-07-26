@@ -2,14 +2,14 @@
 
 ## Overview
 
-This project builds an end-to-end data pipeline, epidemiological analysis, and interactive dashboard for a Data Analysis for Public Health (DAPH) course project. It analyzes the relationship between temperature and weekly all cause mortality across **59 NUTS2 regions** spanning **France**, **Italy**, and **Spain**. Each region also belongs to one of three geographic macrozones (`nord`, `centro`, `sud`) per country, used as an optional grouping dimension for aggregated comparisons — the actual unit of analysis is the individual NUTS2 region, not the macrozone.
+This project builds an end-to-end data pipeline, epidemiological analysis, and interactive dashboard for a Data Analysis for Public Health (DAPH) course project. It analyzes the relationship between temperature and weekly all cause mortality across **59 NUTS2 regions** spanning **France**, **Italy**, and **Spain**. Each region also belongs to one of three geographic macrozones (`nord`, `centro`, `sud`) per country, used as an optional grouping dimension for aggregated comparisons the actual unit of analysis is the individual NUTS2 region. 
 
 The pipeline extracts and stages two data sources:
 
-1. **Eurostat** (`DEMO_R_MWK2_TS`, `DEMO_R_MWK2_05`, `DEMO_R_PJANGROUP`) — weekly all cause mortality (total and by age/sex) and annual population by age/sex, all at NUTS2 resolution.
-2. **Open-Meteo** (historical weather archive) — daily temperature, precipitation, wind, and sunshine data, one series per NUTS2 region (sourced from that region's capital city).
+1. **Eurostat** (`DEMO_R_MWK2_TS`, `DEMO_R_MWK2_05`, `DEMO_R_PJANGROUP`) weekly all cause mortality (total and by age/sex) and annual population by age/sex, all at NUTS2 resolution.
+2. **Open-Meteo** (historical weather archive) daily temperature, precipitation, wind, and sunshine data, one series per NUTS2 region (sourced from that region's capital city).
 
-The analytical approach applies epidemiological measures from DAPH course chapters 1–5 (measures of occurrence, standardization, association measures, bias/confounding) — explicitly **not** advanced statistical models such as DLNM. This is an ecological time-series study using all-cause mortality; heat-attributable deaths require a counterfactual model and cannot be read directly from the data.
+The analytical approach applies epidemiological measures such as: measures of occurrence, standardization, association measures, bias/confounding. This is an ecological time-series study using all-cause mortality; heat-attributable deaths require a counterfactual model and cannot be read directly from the data.
 
 The project has three consumers of the pipeline's output, all reading the same analysis views: a Jupyter **notebook** (static descriptive analysis), a shared **analysis module** (`epi_metrics.py`), and an interactive **Streamlit dashboard**.
 
@@ -19,6 +19,7 @@ The project has three consumers of the pipeline's output, all reading the same a
 
 - Python 3.10 or later
 - Pipeline: `pandas`, `pyarrow`, `pyyaml`, `requests`, `eurostat`, `numpy`
+- Analysis: `scikit-learn` (polynomial temperature-mortality regression)
 - Dashboard: `streamlit`, `plotly`
 
 All are pinned in `requirements.txt`.
@@ -69,7 +70,7 @@ python -m src.transform.build_weekly_dataset_by_age    # age/sex-stratified, (ge
 
 ### 4. Build the region lookup table
 
-Generates a small human-readable lookup (NUTS2 code → region name, macrozone, country, capital city) from `config/locations.yaml`.
+Generates a small human readable lookup (NUTS2 code → region name, macrozone, country, capital city) from `config/locations.yaml`.
 
 ```bash
 python -m src.transform.build_dim_region
@@ -77,9 +78,9 @@ python -m src.transform.build_dim_region
 
 ### 5. Build human-readable analysis views
 
-Left-joins the region lookup onto both analytical datasets, adding `region_name`/`macrozone`/`country` columns alongside the underlying `geo` key — for plotting, reporting, and the dashboard. The base analytical datasets themselves are left untouched (geo-keyed only), so anything that doesn't need human-readable labels keeps using them directly.
+Left-joins the region lookup onto both analytical datasets, adding `region_name`/`macrozone`/`country` columns alongside the underlying `geo` key for plotting, reporting, and the dashboard. The base analytical datasets themselves are left untouched (geo-keyed only), so anything that doesn't need human-readable labels keeps using them directly.
 
-For the age-stratified dataset specifically, this step also produces one additional regrouped view per named scheme in `config/age_bins.yaml` — currently `stratified_heat`, which collapses the fine-grained Eurostat age brackets into `under_65` / `65-74` / `75-84` / `85+` for effect-modification analysis (does age change how strongly heat is associated with mortality?). This is **not** used for the notebook's age-standardization, which relies on the fine-grained quinquennial bins and the full ESP2013 weight table as-is — a coarser scheme here would not line up with those weights, so `age_bins.yaml` intentionally has no "standardization" scheme.
+For the age-stratified dataset specifically, this step also produces one additional regrouped view per named scheme in `config/age_bins.yaml`  currently `stratified_heat`, which collapses the fine-grained Eurostat age brackets into `under_65` / `65-74` / `75-84` / `85+` for effect-modification analysis (does age change how strongly heat is associated with mortality?). This is **not** used for the notebook's age-standardization, which relies on the fine-grained quinquennial bins and the full ESP2013 weight table as is a coarser scheme here would not line up with those weights, so `age_bins.yaml` intentionally has no "standardization" scheme.
 
 ```bash
 python -m src.transform.build_analysis_view
@@ -87,7 +88,7 @@ python -m src.transform.build_analysis_view
 
 ### 6. Explore the analysis notebook
 
-`notebooks/01_Descriptive_analysis.ipynb` walks through the epidemiological analysis on the labeled views: weekly mortality trends, crude and ESP2013-standardized rates, heatwave relative risk (with the seasonal-confounding correction), a simple temperature-mortality regression, age structure as a confounder, and effect modification by age group. It imports the shared calculation functions from `src/analysis/epi_metrics.py` rather than redefining them, so the numbers match the dashboard exactly.
+`notebooks/01_Descriptive_analysis.ipynb` walks through the epidemiological analysis on the labeled views: weekly mortality trends, crude and ESP2013-standardized rates, heatwave relative risk (with the seasonal-confounding correction), a temperature-mortality regression (linear plus a polynomial fit that captures the U/J-shaped cold and heat arms), descriptive excess mortality against a same-week baseline, age structure as a confounder, and effect modification by age group. It imports the shared calculation functions from `src/analysis/epi_metrics.py` rather than redefining them, so the numbers match the dashboard exactly.
 
 ```bash
 jupyter notebook notebooks/01_Descriptive_analysis.ipynb
@@ -95,7 +96,7 @@ jupyter notebook notebooks/01_Descriptive_analysis.ipynb
 
 ### 7. Launch the interactive dashboard
 
-The Streamlit dashboard is the interactive counterpart to the notebook: same calculations, but parameterized by user-controlled filters (time window, heatwave lag, warm-season restriction, geography). Run it from the repo root, after the views exist (step 5).
+The Streamlit dashboard is the interactive counterpart to the notebook: same calculations, but parameterized by user controlled filters (time window, heatwave lag, warm-season restriction, geography). Run it from the repo root, after the views exist (step 5).
 
 ```bash
 streamlit run dashboard/app.py
@@ -112,38 +113,38 @@ If a view is missing, the app says which build step to run rather than failing s
 | Script | Description |
 |---|---|
 | `eurostat_client.py` | Fetches the three Eurostat datasets (mortality total, mortality by age, population by age) via the `eurostat` package, one call per macrozone, with retry/backoff, atomic cache writes, and a summary log line (cache hits / downloaded / failed) instead of one line per chunk |
-| `openmeteo_client.py` | Fetches daily weather via the Open-Meteo archive API, one call per NUTS2 region per year, with retry/backoff, explicit 429 rate-limit handling (respects `Retry-After`, stops the whole batch after repeated consecutive rate limits instead of exhausting the queue), atomic cache writes, and the same summary log line |
+| `openmeteo_client.py` | Fetches daily weather via the Open-Meteo archive API, one call per NUTS2 region per year, with retry/backoff, explicit 429 rate limit handling (respects `Retry-After`, stops the whole batch after repeated consecutive rate limits instead of exhausting the queue), atomic cache writes, and the same summary log line |
 
 ### Staging (`src/staging/`)
 
 | Script | Description |
 |---|---|
-| `common.py` | Shared utilities used by both staging modules: atomic parquet writes, ISO-week-to-date conversion |
+| `common.py` | Shared utilities used by both staging modules: atomic parquet writes, ISO week to date conversion |
 | `eurostat_staging.py` | Melts the wide Eurostat parquet files into long tables (`mortality_total`, `mortality_by_age`, `population_by_age`); trims each series to its real coverage window (leading/trailing gaps = no data collected, not missing) and flags any remaining internal gap as `is_missing` |
-| `openmeteo_staging.py` | Loads daily weather JSON into a tidy daily table; interpolates short gaps in temperature only; detects heat wave days via a per-region, per-month climatological threshold combined with an absolute temperature floor (empirically calibrated so summer extremes are never suppressed and winter noise is always filtered), skipped with an explicit `NA` for regions with insufficient history; aggregates to ISO week with a distinct aggregation function per variable |
+| `openmeteo_staging.py` | Loads daily weather JSON into a tidy daily table; interpolates short gaps in temperature only; detects heat wave days via a per region, per month climatological threshold combined with an absolute temperature floor (empirically calibrated so summer extremes are never suppressed and winter noise is always filtered), skipped with an explicit `NA` for regions with insufficient history; aggregates to ISO week with a distinct aggregation function per variable |
 
 ### Transform (`src/transform/`)
 
 | Script | Description |
 |---|---|
-| `build_weekly_dataset.py` | Joins staged `mortality_total` and `weather_weekly` (inner, on geo/year/week), then left-joins annual `population_by_age` aggregated to a single per-region-per-year total, broadcast to weekly grain at query time. Writes `mortality_weather_weekly.parquet`/`.csv` |
-| `build_weekly_dataset_by_age.py` | Same join logic, but keeps the age/sex breakdown. Reconciles the age-bin mismatch between mortality (which splits 85+ into `Y85-89`/`Y_GE90`) and population (single `Y_GE85` bin) by collapsing mortality's two oldest brackets before joining. Writes `mortality_by_age_weekly.parquet`/`.csv`, for age-standardization and age-specific heat-vulnerability analysis |
+| `build_weekly_dataset.py` | Joins staged `mortality_total` and `weather_weekly` (inner, on geo/year/week), then left-joins annual `population_by_age` aggregated to a single per region per year total, broadcast to weekly grain at query time. Writes `mortality_weather_weekly.parquet`/`.csv` |
+| `build_weekly_dataset_by_age.py` | Same join logic, but keeps the age/sex breakdown. Reconciles the age-bin mismatch between mortality (which splits 85+ into `Y85-89`/`Y_GE90`) and population (single `Y_GE85` bin) by collapsing mortality's two oldest brackets before joining. Writes `mortality_by_age_weekly.parquet`/`.csv`, for age standardization and age specific heat vulnerability analysis |
 | `build_dim_region.py` | Builds `dim_region.csv`: NUTS2 code → official region name, macrozone, country, capital city, sourced from `locations.yaml` plus a verified name lookup. Fails loudly if any NUTS2 code has no matching region name |
-| `build_analysis_view.py` | Left-joins `dim_region` onto both analytical datasets, writing labeled copies to `data/analytics/views/` — `geo` is kept, not replaced, so the underlying join key stays available alongside the human-readable columns. For `mortality_by_age_weekly`, also regroups the labeled view into coarser age bins per scheme in `age_bins.yaml` (currently `stratified_heat`), aggregating `deaths`/`population` (summed) and their `is_missing` flags (`any`) across the collapsed age codes, while carrying weather columns through unchanged (they're duplicated identically across ages within the same geo/year/week, so they're taken as-is rather than summed) |
+| `build_analysis_view.py` | Left-joins `dim_region` onto both analytical datasets, writing labeled copies to `data/analytics/views/` — `geo` is kept, not replaced, so the underlying join key stays available alongside the human readable columns. For `mortality_by_age_weekly`, also regroups the labeled view into coarser age bins per scheme in `age_bins.yaml` (currently `stratified_heat`), aggregating `deaths`/`population` (summed) and their `is_missing` flags (`any`) across the collapsed age codes, while carrying weather columns through unchanged (they're duplicated identically across ages within the same geo/year/week, so they're taken as-is rather than summed) |
 
 ### Analysis (`src/analysis/`)
 
 | Script | Description |
 |---|---|
-| `epi_metrics.py` | Shared epidemiological calculation functions imported by **both** the notebook and the dashboard, so a formula lives in exactly one tested place and the two consumers can never diverge. Includes the ESP2013 weight table, `age_specific_rates()` and `direct_standardize()` (age standardization), `relative_risk()` (from already-aggregated exposed/unexposed sums, so the caller defines what "exposed" means — heatwave weeks, a season, a country, an age group), `restrict_to_warm_season()` (seasonal-confounding control), and `linear_fit()` (the temperature-mortality regression). All functions are pure — they take already-filtered inputs and never decide which rows to exclude, leaving that analysis-specific choice to the caller |
+| `epi_metrics.py` | Shared epidemiological calculation functions imported by **both** the notebook and the dashboard, so a formula lives in exactly one tested place and the two consumers can never diverge. Includes the ESP2013 weight table, `age_specific_rates()` and `direct_standardize()` (age standardization), `relative_risk()` (from already-aggregated exposed/unexposed sums, so the caller defines what "exposed" means — heatwave weeks, a season, a country, an age group), `restrict_to_warm_season()` (seasonal-confounding control), `linear_fit()` (the straight-line temperature-mortality regression), `polynomial_fit()` (a scikit-learn polynomial regression capturing the non-linear U/J-shaped temperature-mortality curve, with R² for comparing degrees), and `excess_mortality()` (descriptive excess deaths against a same-ISO-week, non-heatwave baseline built from non-exposed years only, so the exposure never contaminates its own baseline). All functions are pure in the sense that they take already-filtered inputs and never decide which rows to exclude, leaving that analysis-specific choice to the caller |
 
 ### Dashboard (`dashboard/`)
 
-The dashboard is a thin presentation layer over the pipeline: it contains no epidemiological logic (that stays in `epi_metrics.py`) and reads only the analysis views (never the notebook or intermediate files). It depends on `src/` in one direction only — `src/` knows nothing about the dashboard.
+The dashboard is a thin presentation layer over the pipeline: it contains no epidemiological logic (that stays in `epi_metrics.py`) and reads only the analysis views (never the notebook or intermediate files). It depends on `src/` in one direction only  `src/` knows nothing about the dashboard.
 
 | File | Description |
 |---|---|
-| `app.py` | The Streamlit app. Orchestrates load → global filters → per-tab compute → render. Six tabs: **Overview** (KPI header, RR map, headline verdict), **Relative Risk** (pooled + regional breakdown), **By Age** (effect modification, section 7 of the notebook made interactive), **Compare Regions** (side-by-side RR for a user-picked set of regions, across countries), **Temp vs Mortality** (regression with the winter arm kept visible), and **Trend** (weekly mortality over time). A sidebar holds the global controls every tab respects: geography, a week-range time window, a 0–4 week heatwave lag, and the warm-season toggle |
+| `app.py` | The Streamlit app. Orchestrates load → global filters → per-tab compute → render. Seven tabs: **Overview** (KPI header, RR map, headline verdict), **Relative Risk** (pooled + regional breakdown), **By Age** (effect modification, section 7 of the notebook made interactive), **Compare Regions** (side-by-side RR for a user-picked set of regions, across countries), **Excess Mortality** (descriptive excess deaths vs a same-ISO-week baseline, per year and per country, flagged as descriptive not causal), **Temp vs Mortality** (regression with the winter arm kept visible, offering a straight-line fit plus an adjustable-degree polynomial fit for the U/J curve), and **Trend** (weekly mortality over time, showing the selected single region alone or a country's macrozones). A sidebar holds the global controls every tab respects: geography, a week-range time window, a 0–4 week heatwave lag, and the warm season toggle |
 | `views_loader.py` | Cached data-access layer (`st.cache_data`). Loads the labeled views and, for the map, the NUTS2 coordinates via `src.utils.locations_loader` (so coordinates stay sourced from `locations.yaml`, not duplicated). Fails with an explicit "run build_analysis_view first" message if a view is missing |
 | `components.py` | Reusable UI rendering: the KPI header, the plain-language RR verdict (which flags an implausible RR < 1 as likely seasonal confounding rather than "heat protects"), the region map (scatter-on-map coloured by RR, anchored at RR=1 so filtered views stay comparable), and the collapsible method/limitations panel. Enforces consistent conventions — red = higher risk everywhere, RR = 1 reference line always visible |
 
